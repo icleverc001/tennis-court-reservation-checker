@@ -1,0 +1,8 @@
+/.vscode
+/app.cmd
+/output.csv
+/test
+/users.json
+/venv
+/_bck
+/__pycache__

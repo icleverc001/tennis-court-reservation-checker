@@ -1,0 +1,24 @@
+{
+    "shinjuku":[
+        {
+            "name": "例：太郎",
+            "id": "YOUR_ID",
+            "pw": "YOUR_PASSWORD"
+        }
+    ],
+    "tokyo":[
+        {
+            "name": "例：花子",
+            "id": "YOUR_ID",
+            "pw": "YOUR_PASSWORD"
+        }
+    ],
+    "suginami":[
+        {
+            "name": "例：次郎",
+            "id": "YOUR_ID",
+            "pw": "YOUR_PASSWORD",
+            "ignore": 0
+        }
+    ]
+} 
