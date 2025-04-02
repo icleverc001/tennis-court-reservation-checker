@@ -5,10 +5,13 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.remote.webelement import WebElement
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 import os
 import json
 import time
+import argparse
 from datetime import datetime
 
 USER_JSON_PATH = 'users.json'
@@ -32,7 +35,7 @@ def read_users_json():
 
 def write_csv(lines):
     with open(OUTPUT_CSV_PATH, mode='w', encoding='cp932') as f:
-        f.write('\n')
+        f.write(f'{datetime.now().strftime("%Y/%m/%d %H:%M:%S")}\n')
         for line in sorted(lines):
             f.write(line + '\n')
     
@@ -46,7 +49,7 @@ def write_park_csv(path: str, lines: list[str]):
     # ディレクトリが存在しない場合は作成
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, mode='w', encoding='cp932') as f:
-        f.write(f'{datetime.now}\n')
+        f.write(f'{datetime.now().strftime("%Y/%m/%d %H:%M:%S")}\n')
         for line in lines:
             f.write(line + '\n')
             
@@ -146,14 +149,24 @@ def shinjuku_person(driver: webdriver.Chrome, user: dict[str, str]) -> list[str]
     pass_input.send_keys(user["pw"])
     btn_login = driver.find_element(By.ID, "btn-go")
     btn_login.click()
-    time.sleep(1)
+    time.sleep(2)  # ログイン後の待機時間を増やす
     result = []
     
     # 予約一覧
-    driver.find_element(By.CSS_SELECTOR, "#nav-menu > nav > div:nth-child(2) > a").click()
-    driver.find_element(By.CSS_SELECTOR, "#nav-menu > nav > div:nth-child(2) > div > a:nth-child(2)").click()
-    
     try:
+        # 要素が見つかるまで待機
+        nav_menu = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "#nav-menu > nav > div:nth-child(2) > a"))
+        )
+        nav_menu.click()
+        
+        # 予約一覧のリンクが表示されるまで待機
+        rsv_link = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "#nav-menu > nav > div:nth-child(2) > div > a:nth-child(2)"))
+        )
+        rsv_link.click()
+        time.sleep(2)  # 遷移後の待機時間を追加
+        
         time.sleep(2)
         rsvlist = driver.find_element(By.ID, "rsvlist")
         if '該当する予約はありません' in rsvlist.text:
@@ -236,6 +249,8 @@ def tokyo(driver, users):
     lines = []
     
     for user in users:
+        if 'ignore' in user and user['ignore'] == 1:
+            continue
         print(user["name"])
         books = tokyo_person(driver, user)
         lines.extend(books)
@@ -258,35 +273,50 @@ def suginami_person(driver: webdriver.Chrome, user) -> list[str]:
     login.click()
     print('login done')
 
-    time.sleep(2)
+    time.sleep(3)  # 待機時間を延長
     
-    tobook = driver.find_element(By.ID, "10")
-    tobook.click()
-    time.sleep(3)
-    
-    booktable = driver.find_element(By.CSS_SELECTOR, "#app > form > div.application-main > div > div:nth-child(2) > div > div.page-body.p-3 > div")
-    details = booktable.find_elements(By.CLASS_NAME, "detail")
-    
-    result = []
-    for detail in details:
-        card = detail.find_element(By.CSS_SELECTOR, "div:nth-child(1) > div > div:nth-child(2) > div.w-100 > div > div:nth-child(1)")
-        items = card.find_elements(By.CLASS_NAME, "detail-items")
+    try:
+        # 要素を探す
+        tobook = driver.find_element(By.ID, "10")
+        # スクロールして要素を表示
+        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", tobook)
+        time.sleep(2)  # スクロール後に少し待機
+        
+        # JavaScriptを使用して直接クリック
+        driver.execute_script("arguments[0].click();", tobook)
+        print('予約確認ボタンをクリックしました')
+        time.sleep(4)  # クリック後の待機時間を長くする
+        
+        # ここから先の処理は変更なし
+        booktable = driver.find_element(By.CSS_SELECTOR, "#app > form > div.application-main > div > div:nth-child(2) > div > div.page-body.p-3 > div")
+        details = booktable.find_elements(By.CLASS_NAME, "detail")
+        
+        result = []
+        for detail in details:
+            card = detail.find_element(By.CSS_SELECTOR, "div:nth-child(1) > div > div:nth-child(2) > div.w-100 > div > div:nth-child(1)")
+            items = card.find_elements(By.CLASS_NAME, "detail-items")
 
-        park = items[0].find_element(By.CSS_SELECTOR, "dl > dd > span:nth-child(2)").text
-        
-        dates = items[1].find_elements(By.CSS_SELECTOR, "dl > dd")
-        date = dates[0].text
-        timetxt = dates[1].text    
+            park = items[0].find_element(By.CSS_SELECTOR, "dl > dd > span:nth-child(2)").text
+            
+            dates = items[1].find_elements(By.CSS_SELECTOR, "dl > dd")
+            date = dates[0].text
+            timetxt = dates[1].text    
                 
-        txt = custom_text_time_suginami([date, timetxt, park, user["name"]])
-        print(txt)
-        result.append(txt)
-        
-    # logout
-    logout = driver.find_element(By.CSS_SELECTOR, "#app > div:nth-child(1) > form > header > div > div > div > ul > li.logout > button")
-    driver.execute_script("arguments[0].click();", logout)
-    print('logout')
-    time.sleep(1)
+            txt = custom_text_time_suginami([date, timetxt, park, user["name"]])
+            print(txt)
+            result.append(txt)
+    except Exception as e:
+        print(f"予約確認時にエラーが発生しました: {e}")
+        return []
+    finally:
+        # logout
+        try:
+            logout = driver.find_element(By.CSS_SELECTOR, "#app > div:nth-child(1) > form > header > div > div > div > ul > li.logout > button")
+            driver.execute_script("arguments[0].click();", logout)
+            print('logout')
+            time.sleep(1)
+        except Exception as e:
+            print(f"ログアウト時にエラーが発生しました: {e}")
     
     return result
 
@@ -304,6 +334,12 @@ def suginami(driver, users):
 
 
 def main():
+    # コマンドライン引数の設定
+    parser = argparse.ArgumentParser(description='テニスコート予約情報の取得')
+    parser.add_argument('--areas', nargs='+', choices=['shinjuku', 'tokyo', 'suginami'],
+                      help='検索する自治体を指定（例：--areas shinjuku tokyo）')
+    args = parser.parse_args()
+
     print('start')
 
     # ヘッドレスモードを有効にする（次の行をコメントアウトすると画面が表示される）。
@@ -330,25 +366,31 @@ def main():
     try:
         shinjuku_users, tokyo_users, suginami_users = read_users_json()
         print('loaded csv')
-        
-        # 新宿区
-        driver.get(url_shinjuku)
-        lines_shinjuku = shinjuku(driver, shinjuku_users)
-        write_park_csv(OUTPUT_SHINJUKU_CSV_PATH, lines_shinjuku)
-        lines.extend(lines_shinjuku)
 
-        # 杉並区
-        driver.get(url_suginami)
-        lines_suginami = suginami(driver, suginami_users)
-        write_park_csv(OUTPUT_SUGINAMI_CSV_PATH, lines_suginami)
-        lines.extend(lines_suginami)
+        # 指定された自治体のみを検索（指定がない場合は全て検索）
+        areas_to_search = args.areas if args.areas else ['shinjuku', 'tokyo', 'suginami']
         
-        # 東京都
-        driver.get(url_tokyo)
-        time.sleep(2)
-        lines_tokyo = tokyo(driver, tokyo_users)
-        write_park_csv(OUTPUT_TOKYO_CSV_PATH, lines_tokyo)
-        lines.extend(lines_tokyo)
+        if 'suginami' in areas_to_search:
+            print('杉並区の検索を開始')
+            driver.get(url_suginami)
+            lines_suginami = suginami(driver, suginami_users)
+            write_park_csv(OUTPUT_SUGINAMI_CSV_PATH, lines_suginami)
+            lines.extend(lines_suginami)
+        
+        if 'shinjuku' in areas_to_search:
+            print('新宿区の検索を開始')
+            driver.get(url_shinjuku)
+            lines_shinjuku = shinjuku(driver, shinjuku_users)
+            write_park_csv(OUTPUT_SHINJUKU_CSV_PATH, lines_shinjuku)
+            lines.extend(lines_shinjuku)
+        
+        if 'tokyo' in areas_to_search:
+            print('東京都の検索を開始')
+            driver.get(url_tokyo)
+            time.sleep(2)
+            lines_tokyo = tokyo(driver, tokyo_users)
+            write_park_csv(OUTPUT_TOKYO_CSV_PATH, lines_tokyo)
+            lines.extend(lines_tokyo)
 
     except Exception as e:
         print(e)
