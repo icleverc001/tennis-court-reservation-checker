@@ -3,7 +3,6 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
-from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -258,65 +257,90 @@ def tokyo(driver, users):
     return lines
 
 def suginami_person(driver: webdriver.Chrome, user) -> list[str]:
-    loginbtn = driver.find_element(By.CSS_SELECTOR, '#app > div:nth-child(1) > form > header > div > div.d-flex.justify-content-between > div > p > button')
-    loginbtn.click()
-    
-    time.sleep(1)
-
-    id_input = driver.find_element(By.ID, "UserLoginInputModel_Id")
-    id_input.send_keys(user["id"])
-
-    pass_input = driver.find_element(By.ID, "password")
-    pass_input.send_keys(user["pw"])
-    
-    login = driver.find_element(By.CSS_SELECTOR, "#app > form > div.fixed-bottom > ul > li.item.next > button")
-    login.click()
-    print('login done')
-
-    time.sleep(3)  # 待機時間を延長
-    
     try:
-        # 要素を探す
-        tobook = driver.find_element(By.ID, "10")
-        # スクロールして要素を表示
-        driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", tobook)
-        time.sleep(2)  # スクロール後に少し待機
+        # ログインボタンを待機してクリック
+        loginbtn = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, '#app > div:nth-child(1) > form > header > div > div.d-flex.justify-content-between > div > p > button'))
+        )
+        loginbtn.click()
         
-        # JavaScriptを使用して直接クリック
-        driver.execute_script("arguments[0].click();", tobook)
-        print('予約確認ボタンをクリックしました')
-        time.sleep(4)  # クリック後の待機時間を長くする
-        
-        # ここから先の処理は変更なし
-        booktable = driver.find_element(By.CSS_SELECTOR, "#app > form > div.application-main > div > div:nth-child(2) > div > div.page-body.p-3 > div")
-        details = booktable.find_elements(By.CLASS_NAME, "detail")
-        
-        result = []
-        for detail in details:
-            card = detail.find_element(By.CSS_SELECTOR, "div:nth-child(1) > div > div:nth-child(2) > div.w-100 > div > div:nth-child(1)")
-            items = card.find_elements(By.CLASS_NAME, "detail-items")
+        time.sleep(1)
 
-            park = items[0].find_element(By.CSS_SELECTOR, "dl > dd > span:nth-child(2)").text
-            
-            dates = items[1].find_elements(By.CSS_SELECTOR, "dl > dd")
-            date = dates[0].text
-            timetxt = dates[1].text    
-                
-            txt = custom_text_time_suginami([date, timetxt, park, user["name"]])
-            print(txt)
-            result.append(txt)
-    except Exception as e:
-        print(f"予約確認時にエラーが発生しました: {e}")
-        return []
-    finally:
-        # logout
+        # ログイン情報を入力
+        id_input = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.ID, "UserLoginInputModel_Id"))
+        )
+        id_input.send_keys(user["id"])
+
+        pass_input = driver.find_element(By.ID, "password")
+        pass_input.send_keys(user["pw"])
+        
+        login = driver.find_element(By.CSS_SELECTOR, "#app > form > div.fixed-bottom > ul > li.item.next > button")
+        login.click()
+        print('ログイン完了')
+
+        time.sleep(3)  # ログイン後の待機時間
+
         try:
-            logout = driver.find_element(By.CSS_SELECTOR, "#app > div:nth-child(1) > form > header > div > div > div > ul > li.logout > button")
+            # 予約確認ボタンを待機してクリック
+            tobook = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.ID, "10"))
+            )
+            
+            # スクロールして要素を表示
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", tobook)
+            time.sleep(1)
+            
+            # JavaScriptを使用して直接クリック
+            driver.execute_script("arguments[0].click();", tobook)
+            print('予約確認ボタンをクリックしました')
+            time.sleep(3)  # クリック後の待機時間
+            
+            # 予約一覧の要素を待機
+            booktable = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "#app > form > div.application-main > div > div:nth-child(2) > div > div.page-body.p-3 > div"))
+            )
+            
+            details = booktable.find_elements(By.CLASS_NAME, "detail")
+            result = []
+            
+            for detail in details:
+                try:
+                    card = detail.find_element(By.CSS_SELECTOR, "div:nth-child(1) > div > div:nth-child(2) > div.w-100 > div > div:nth-child(1)")
+                    items = card.find_elements(By.CLASS_NAME, "detail-items")
+
+                    park = items[0].find_element(By.CSS_SELECTOR, "dl > dd > span:nth-child(2)").text
+                    
+                    dates = items[1].find_elements(By.CSS_SELECTOR, "dl > dd")
+                    date = dates[0].text
+                    timetxt = dates[1].text    
+                        
+                    txt = custom_text_time_suginami([date, timetxt, park, user["name"]])
+                    print(txt)
+                    result.append(txt)
+                except Exception as e:
+                    print(f"予約情報の取得中にエラーが発生しました: {e}")
+                    continue
+                    
+        except Exception as e:
+            print(f"予約確認ボタンの操作中にエラーが発生しました: {e}")
+            return []
+            
+    except Exception as e:
+        print(f"ログイン処理中にエラーが発生しました: {e}")
+        return []
+        
+    finally:
+        # ログアウト処理
+        try:
+            logout = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "#app > div:nth-child(1) > form > header > div > div > div > ul > li.logout > button"))
+            )
             driver.execute_script("arguments[0].click();", logout)
-            print('logout')
+            print('ログアウト完了')
             time.sleep(1)
         except Exception as e:
-            print(f"ログアウト時にエラーが発生しました: {e}")
+            print(f"ログアウト処理中にエラーが発生しました: {e}")
     
     return result
 
@@ -334,33 +358,19 @@ def suginami(driver, users):
 
 
 def main():
-    # コマンドライン引数の設定
-    parser = argparse.ArgumentParser(description='テニスコート予約情報の取得')
-    parser.add_argument('--areas', nargs='+', choices=['shinjuku', 'tokyo', 'suginami'],
-                      help='検索する自治体を指定（例：--areas shinjuku tokyo）')
-    args = parser.parse_args()
-
     print('start')
 
     # ヘッドレスモードを有効にする（次の行をコメントアウトすると画面が表示される）。
     options: webdriver.ChromeOptions = webdriver.ChromeOptions()
     options.add_argument('--headless')
     options.add_argument('--no-sandbox')
-    # options.add_argument('--single-process')
     options.add_argument('--disable-dev-shm-usage')
-    # USBエラーを抑制するための追加オプション
-    # options.add_argument('--disable-dev-usb-keyboard')
     options.add_argument('--disable-extensions')
-    # 画像の読み込みを無効化
-    # options.add_argument('--blink-settings=imagesEnabled=false')
-    options.add_experimental_option('excludeSwitches', ['enable-logging'])  # ログの抑制
+    options.add_experimental_option('excludeSwitches', ['enable-logging'])
     options.use_chromium = True
 
-    # 困ったときはchromedriverをUpdate
-    # pip install -U chromedriver-binary-auto
-    # driver = webdriver.Chrome()
+    # 手動でインストールしたChromeDriverを使用
     driver = webdriver.Chrome(options=options)
-    # driver = webdriver.Chrome(ChromeDriverManager().install(), options=options)
     lines = []
 
     try:
@@ -368,7 +378,7 @@ def main():
         print('loaded csv')
 
         # 指定された自治体のみを検索（指定がない場合は全て検索）
-        areas_to_search = args.areas if args.areas else ['shinjuku', 'tokyo', 'suginami']
+        areas_to_search = ['shinjuku', 'tokyo', 'suginami']
         
         if 'suginami' in areas_to_search:
             print('杉並区の検索を開始')
